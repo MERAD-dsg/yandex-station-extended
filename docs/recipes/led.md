@@ -5,7 +5,7 @@
 | Модель | Как устроено | Где описано |
 |---|---|---|
 | Лайт | 3 RGB-зоны кольца через sysfs | ниже |
-| Мини 2 | 6 RGB-зон + LED-часы через sysfs | [`contrib/install-rgb-alice-mini2.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/install-rgb-alice-mini2.sh), [страница модели](../devices/station-mini2.md) |
+| Мини 2 | 6 RGB-зон + LED-часы через sysfs | [`contrib/ring-mini2-rainbow.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/ring-mini2-rainbow.sh), [`contrib/install-rgb-alice-mini2.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/install-rgb-alice-mini2.sh), [страница модели](../devices/station-mini2.md) |
 | Станция 2 | панель из 88 светодиодов через framebuffer `/dev/fb0` (`89×1`) | [страница модели](../devices/station-2.md#led) |
 | Мини 3 | кольцо через framebuffer `/dev/fb0` | [страница модели](../devices/station-mini3.md), [`contrib/ring.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/ring.sh) |
 

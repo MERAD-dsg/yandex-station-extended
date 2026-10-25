@@ -71,7 +71,9 @@ NAND 256 МБ SLC, page 2048, erase 128 КБ. Две ревизии: Toshiba `TC
 - **Кольцо, 6 RGB-зон**: `/sys/class/leds/mini2:{red,green,blue}:ring{1..6}` (18 каналов).
 - **LED-часы**: `/sys/class/leds/mini2:white:clock*` — сегменты `clockA1`…`clockG4`, `clockDEGREE`,
   `clockMINUS`, `clockPLUS1`…`clockPLUS4`.
-- Всё пишется из userspace напрямую (sysfs, root). Готовый скрипт для кольца —
+- Всё пишется из userspace напрямую (sysfs, root). Для непрерывной радужной анимации кольца —
+  [`contrib/ring-mini2-rainbow.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/ring-mini2-rainbow.sh)
+  (запускается на колонке, остановка — Ctrl+C). Для замены штатных паттернов Алисы —
   [`contrib/install-rgb-alice-mini2.sh`](https://github.com/Marker284/yandex-station-extended/blob/main/contrib/install-rgb-alice-mini2.sh).
 - Формат анимаций прошивки — `.led` (как на Лайте, но 6 зон вместо 3): см.
   [формат `.led`](station-lite.md#led-format). Количество hex-колонок в кадре

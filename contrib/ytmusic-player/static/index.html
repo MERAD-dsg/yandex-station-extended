@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11131a">
+  <meta name="referrer" content="no-referrer">
+  <title>YouTube Music → Станция</title>
+  <style>
+    :root { color-scheme: dark; --bg:#11131a; --panel:#1b1e28; --panel2:#242836; --text:#f6f7fb; --muted:#a6adbd; --accent:#ff4168; --line:#303545; }
+    * { box-sizing:border-box }
+    body { margin:0; min-height:100vh; background:radial-gradient(ellipse at 15% -10%,#3c2131 0,transparent 42%),var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif }
+    main { width:min(820px,100%); margin:0 auto; padding:30px 18px 64px }
+    header { display:flex; align-items:center; gap:15px; margin:8px 0 25px }
+    .mark { display:grid; place-items:center; width:52px;height:52px;border-radius:17px;background:linear-gradient(140deg,#ff4168,#bd2cff);font-size:25px;box-shadow:0 10px 35px #ff41682c }
+    h1 { font-size:clamp(22px,5vw,30px);line-height:1.15;margin:0;letter-spacing:-.04em }
+    .sub { color:var(--muted);font-size:14px;margin-top:5px }
+    .search { display:flex;gap:9px;margin:20px 0 16px }
+    input { min-width:0;flex:1;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:14px 15px;font:inherit;outline:none }
+    input:focus { border-color:#fa5378;box-shadow:0 0 0 3px #fa53781c }
+    button { border:0;border-radius:13px;padding:12px 17px;background:var(--accent);color:white;font:600 15px system-ui;cursor:pointer;white-space:nowrap }
+    button:hover { filter:brightness(1.09) } button:disabled { opacity:.5;cursor:wait }
+    .stop { background:var(--panel2);border:1px solid var(--line);color:var(--text) }
+    .toolbar { display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 16px }
+    #status { min-height:24px;color:var(--muted);font-size:14px }
+    #status.error { color:#ff9da9 }
+    .cards { display:grid;gap:9px }
+    .track { display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:13px;background:linear-gradient(105deg,var(--panel),#191c25);border:1px solid #292d39;border-radius:15px;padding:9px 10px }
+    .cover { width:58px;height:58px;border-radius:10px;background:#292d39;object-fit:cover }
+    .title { font-weight:650;line-height:1.25;overflow-wrap:anywhere }
+    .meta { color:var(--muted);font-size:13px;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+    .play { width:44px;height:44px;padding:0;border-radius:50%;font-size:17px }
+    .empty { background:#191c25;border:1px dashed var(--line);border-radius:15px;padding:23px;color:var(--muted);text-align:center }
+    .foot { margin-top:25px;padding:14px 15px;border:1px solid #37313a;border-radius:13px;color:#b9b5c1;font-size:12px;background:#19171e }
+    @media(max-width:520px) { main{padding:23px 13px 40px}.search{gap:7px}button{padding:12px 13px}.track{grid-template-columns:52px 1fr auto;gap:10px}.cover{width:52px;height:52px}.play{width:41px;height:41px} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true">♪</div>
+    <div><h1>YouTube Music</h1><div class="sub">Поиск и воспроизведение на Яндекс Станции</div></div>
+  </header>
+  <form class="search" id="searchForm">
+    <input id="query" type="search" placeholder="Исполнитель, песня или альбом" autocomplete="off" maxlength="200" required>
+    <button id="searchButton" type="submit">Найти</button>
+  </form>
+  <div class="toolbar">
+    <div id="status" role="status">Введите запрос для поиска музыки.</div>
+    <button id="stopButton" class="stop" type="button">■ Стоп</button>
+  </div>
+  <section id="results" class="cards" aria-live="polite"></section>
+  <div class="foot">Неофициальный прототип на базе InnerTube. Нужны Интернет и включённый компьютер с этим сервером. Не открывайте его порт в Интернет. Доступность треков и работа поиска зависят от YouTube.</div>
+</main>
+<script>
+  const token = new URLSearchParams(location.search).get('key') || '';
+  const statusEl = document.querySelector('#status');
+  const resultsEl = document.querySelector('#results');
+  const searchButton = document.querySelector('#searchButton');
+  const request = async (path, options = {}) => {
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `Ошибка HTTP ${response.status}`);
+    return data;
+  };
+  const setStatus = (text, error = false) => {
+    statusEl.textContent = text;
+    statusEl.classList.toggle('error', error);
+  };
+  const play = async track => {
+    setStatus(`Запускаю: ${track.title}…`);
+    try {
+      await request('/api/play', { method: 'POST', body: JSON.stringify({ video_id: track.video_id, title: track.title }) });
+      setStatus(`Играет: ${track.title}`);
+    } catch (e) { setStatus(e.message, true); }
+  };
+  document.querySelector('#searchForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const q = document.querySelector('#query').value.trim();
+    if (!q) return;
+    searchButton.disabled = true;
+    resultsEl.replaceChildren();
+    setStatus('Ищу в YouTube Music…');
+    try {
+      const data = await request(`/api/search?q=${encodeURIComponent(q)}`);
+      if (!data.results.length) {
+        setStatus('По этому запросу ничего не найдено.');
+        resultsEl.innerHTML = '<div class="empty">Попробуйте изменить запрос.</div>';
+        return;
+      }
+      setStatus(`Найдено: ${data.results.length}`);
+      for (const track of data.results) {
+        const row = document.createElement('article');
+        row.className = 'track';
+        const img = document.createElement('img');
+        img.className = 'cover'; img.alt = ''; img.loading = 'lazy';
+        if (track.thumbnail) img.src = track.thumbnail;
+        const info = document.createElement('div');
+        const title = document.createElement('div'); title.className = 'title'; title.textContent = track.title;
+        const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = [track.subtitle, track.duration].filter(Boolean).join(' · ');
+        info.append(title, meta);
+        const button = document.createElement('button'); button.className = 'play'; button.type = 'button'; button.title = 'Воспроизвести'; button.textContent = '▶';
+        button.addEventListener('click', () => play(track));
+        row.append(img, info, button); resultsEl.append(row);
+      }
+    } catch (e) { setStatus(e.message, true); }
+    finally { searchButton.disabled = false; }
+  });
+  document.querySelector('#stopButton').addEventListener('click', async () => {
+    setStatus('Останавливаю…');
+    try { await request('/api/stop', { method: 'POST' }); setStatus('Воспроизведение остановлено.'); }
+    catch (e) { setStatus(e.message, true); }
+  });
+</script>
+</body>
+</html>
