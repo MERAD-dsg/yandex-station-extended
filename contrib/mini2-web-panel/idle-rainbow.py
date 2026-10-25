@@ -32,7 +32,7 @@ LED_DIR = Path("/sys/class/leds")
 IPC_HOST = "127.0.0.1"
 IPC_PORT = 9875
 MAX_FRAME = 512 * 1024
-IDLE_DWELL = 6.0
+IDLE_DWELL = 3.0
 POLL_INTERVAL = 0.025
 FRAME_INTERVAL = 0.12
 RING_CHANNELS = [(zone, color) for zone in range(1, 7) for color in ("red", "green", "blue")]
@@ -321,7 +321,7 @@ def run_monitor() -> int:
                     dark_since = now
                 if now - dark_since < IDLE_DWELL:
                     state = "waiting-for-dark-ring"
-                    _write_status(state, activity, "Ring must stay dark for 6 seconds")
+                    _write_status(state, activity, "Ring must stay dark for 3 seconds")
                     time.sleep(POLL_INTERVAL)
                     continue
                 last_frame = [0] * 18

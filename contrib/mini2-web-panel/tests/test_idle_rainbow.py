@@ -62,6 +62,9 @@ class IdleRainbowTests(unittest.TestCase):
         self.assertTrue(all(isinstance(value, int) and 0 <= value <= 255 for value in frame))
         self.assertNotEqual(frame, [0] * 18)
 
+    def test_idle_dwell_is_three_seconds(self):
+        self.assertEqual(idle.IDLE_DWELL, 3.0)
+
     def test_dark_requires_every_channel_to_be_readable_and_zero(self):
         self.assertTrue(idle.is_dark([0] * 18))
         self.assertFalse(idle.is_dark([0] * 17 + [1]))
