@@ -1,5 +1,7 @@
+import os
 import shlex
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -43,6 +45,31 @@ class ParseMusicResultsTests(unittest.TestCase):
         }
         results = app.parse_music_results({"contents": [row, row]})
         self.assertEqual(len(results), 1)
+
+
+class CookieAuthTests(unittest.TestCase):
+    def test_reads_only_youtube_google_cookies_and_signs_request(self):
+        tab = "\t"
+        newline = "\n"
+        content = (
+            f".youtube.com{tab}TRUE{tab}/{tab}TRUE{tab}0{tab}SAPISID{tab}secret-cookie{newline}"
+            f".google.com{tab}TRUE{tab}/{tab}TRUE{tab}0{tab}__Secure-3PAPISID{tab}secure-cookie{newline}"
+            f".notyoutube.com{tab}TRUE{tab}/{tab}TRUE{tab}0{tab}SAPISID{tab}should-not-load{newline}"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as file:
+            file.write(content)
+            path = file.name
+        try:
+            with patch.dict(os.environ, {"YTM_COOKIE_FILE": path}):
+                cookies = app._read_yt_cookies()
+            self.assertEqual(cookies["SAPISID"], "secret-cookie")
+            self.assertNotIn("should-not-load", cookies.values())
+            headers = app._auth_headers(cookies)
+            self.assertIn("SAPISIDHASH ", headers["Authorization"])
+            self.assertIn("SAPISID3PHASH ", headers["Authorization"])
+            self.assertEqual(headers["X-Origin"], "https://music.youtube.com")
+        finally:
+            os.unlink(path)
 
 
 class RemoteCommandTests(unittest.TestCase):

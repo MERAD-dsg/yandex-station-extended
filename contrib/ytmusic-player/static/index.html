@@ -50,7 +50,7 @@
     <button id="stopButton" class="stop" type="button">■ Стоп</button>
   </div>
   <section id="results" class="cards" aria-live="polite"></section>
-  <div class="foot">Неофициальный прототип на базе InnerTube. Нужны Интернет и включённый компьютер с этим сервером. Не открывайте его порт в Интернет. Доступность треков и работа поиска зависят от YouTube.</div>
+  <div class="foot">Неофициальный прототип на базе InnerTube. Можно включить авторизацию локальным cookies.txt (см. инструкцию). Нужны Интернет и включённый компьютер с этим сервером. Не открывайте его порт в Интернет. Доступность треков и работа поиска зависят от YouTube.</div>
 </main>
 <script>
   const token = new URLSearchParams(location.search).get('key') || '';
@@ -114,6 +114,12 @@
     try { await request('/api/stop', { method: 'POST' }); setStatus('Воспроизведение остановлено.'); }
     catch (e) { setStatus(e.message, true); }
   });
+  (async () => {
+    try {
+      const state = await request('/api/status');
+      setStatus(state.cookie_auth ? `Cookies загружены (аккаунт ${state.account_index}); проверка будет при запросе к YouTube.` : 'Cookie не заданы: гостевой режим.');
+    } catch (e) { setStatus(e.message, true); }
+  })();
 </script>
 </body>
 </html>

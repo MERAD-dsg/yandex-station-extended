@@ -1,6 +1,8 @@
 venv/
 site/
 __pycache__/
+/contrib/ytmusic-player/cookies.txt
+/contrib/ytmusic-player/cookies-*.txt
 *.py[cod]
 *$py.class
 .cache/

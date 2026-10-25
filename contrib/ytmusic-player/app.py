@@ -6,12 +6,14 @@ GStreamer's souphttpsrc on the Station, not relayed or stored by this app.
 """
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import os
 import secrets
 import shlex
 import socket
 import threading
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -37,16 +39,100 @@ app = FastAPI(title="YT Music → Station", docs_url=None, redoc_url=None)
 _clients: dict[str, InnerTube] = {}
 _clients_lock = threading.Lock()
 
+# Narrow allow-list: never forward every cookie from a browser export.
+_AUTH_COOKIE_NAMES = {
+    "SAPISID", "APISID", "SID", "HSID", "SSID", "LOGIN_INFO",
+    "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PAPISID", "__Secure-3PAPISID",
+    "PREF", "YSC", "VISITOR_INFO1_LIVE", "__Secure-ROLLOUT_TOKEN",
+}
+_HASH_COOKIE_PREFIXES = (
+    ("SAPISID", "SAPISIDHASH"),
+    ("__Secure-1PAPISID", "SAPISID1PHASH"),
+    ("__Secure-3PAPISID", "SAPISID3PHASH"),
+)
+_AUTH_ORIGIN = "https://music.youtube.com"
+
 
 class PlayRequest(BaseModel):
     video_id: str = Field(min_length=6, max_length=20, pattern=r"^[A-Za-z0-9_-]+$")
     title: str = Field(default="YouTube Music", max_length=300)
 
 
+def _read_yt_cookies() -> dict[str, str]:
+    """Read a browser-exported Netscape cookies.txt without logging its contents."""
+    filename = os.environ.get("YTM_COOKIE_FILE", "").strip()
+    if not filename:
+        return {}
+    path = Path(filename).expanduser()
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise RuntimeError(f"Не удалось прочитать YTM_COOKIE_FILE ({path}): {exc}") from exc
+
+    cookies: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("#HttpOnly_"):
+            line = line[len("#HttpOnly_"):]
+        elif line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 7:  # Netscape format: domain, flags, path, secure, expiry, name, value
+            domain, name, value = fields[0].lower().lstrip("."), fields[5], fields[6]
+            try:
+                expires = int(fields[4])
+            except ValueError:
+                expires = 0
+            allowed_domain = (
+                domain == "youtube.com" or domain.endswith(".youtube.com")
+                or domain == "google.com" or domain.endswith(".google.com")
+            )
+            if expires and expires < time.time():
+                continue
+            if allowed_domain and name in _AUTH_COOKIE_NAMES:
+                cookies[name] = value
+        elif "=" in line:  # also accept a raw Cookie header saved as one line
+            for part in line.split(";"):
+                name, separator, value = part.strip().partition("=")
+                if separator and name in _AUTH_COOKIE_NAMES:
+                    cookies[name] = value.strip()
+    if not any(name in cookies for name, _prefix in _HASH_COOKIE_PREFIXES):
+        raise RuntimeError("В YTM_COOKIE_FILE нет SAPISID / __Secure-1PAPISID / __Secure-3PAPISID")
+    return cookies
+
+
+def _auth_headers(cookies: dict[str, str]) -> dict[str, str]:
+    """Build the SAPISIDHASH authorization header used by YouTube web clients."""
+    timestamp = str(int(time.time()))
+    parts: list[str] = []
+    # YouTube's web client uses the 3P cookie as a fallback for SAPISID too.
+    sapisid = cookies.get("SAPISID") or cookies.get("__Secure-3PAPISID")
+    values = [sapisid, cookies.get("__Secure-1PAPISID"), cookies.get("__Secure-3PAPISID")]
+    for (_cookie_name, prefix), value in zip(_HASH_COOKIE_PREFIXES, values):
+        if value:
+            digest = hashlib.sha1(f"{timestamp} {value} {_AUTH_ORIGIN}".encode()).hexdigest()
+            parts.append(f"{prefix} {timestamp}_{digest}")
+    headers = {
+        "Cookie": "; ".join(f"{key}={value}" for key, value in cookies.items()),
+        "X-Goog-AuthUser": os.environ.get("YTM_AUTH_USER", "0"),
+        "X-Origin": _AUTH_ORIGIN,
+        "Origin": _AUTH_ORIGIN,
+    }
+    if parts:
+        headers["Authorization"] = " ".join(parts)
+    return headers
+
+
 def _client(name: str) -> InnerTube:
     with _clients_lock:
         if name not in _clients:
-            _clients[name] = InnerTube(name)
+            client = InnerTube(name)
+            cookies = _read_yt_cookies()
+            if cookies:
+                client.adaptor.session.headers.update(_auth_headers(cookies))
+            _clients[name] = client
         return _clients[name]
 
 
@@ -255,6 +341,16 @@ def index(request: Request):
     )
 
 
+@app.get("/api/status")
+def status(request: Request):
+    _authorize(request)
+    try:
+        cookies = _read_yt_cookies()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"cookie_auth": bool(cookies), "account_index": os.environ.get("YTM_AUTH_USER", "0")}
+
+
 @app.get("/api/search")
 def search(request: Request, q: str):
     _authorize(request)
@@ -306,4 +402,10 @@ if __name__ == "__main__":
     for address in _lan_ipv4():
         print(f"Откройте на телефоне/ПК: http://{address}:8788/?key={quote(WEB_TOKEN)}")
     print("Не публикуйте этот порт в Интернет; для входа в колонку нужен root SSH с пустым паролем.")
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("YTM_PORT", "8788")), log_level="info")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("YTM_PORT", "8788")),
+        log_level="info",
+        access_log=False,
+    )
