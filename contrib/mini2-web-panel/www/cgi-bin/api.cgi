@@ -86,10 +86,35 @@ case "$ACTION" in
     total_mb=$((total_kb / 1024))
     volume=$(amixer sget Master 2>/dev/null | sed -n 's/.*\[\([0-9][0-9]*\)%\].*/\1/p' | head -n 1 || true)
     case "$volume" in ''|*[!0-9]*) volume=null ;; *) [ "$volume" -le 100 ] || volume=100 ;; esac
+    loadavg=$(awk '{printf "%.2f %.2f %.2f", $1, $2, $3}' /proc/loadavg 2>/dev/null || echo unknown)
+    temperature=null
+    for temp_file in /sys/class/thermal/thermal_zone*/temp; do
+      [ -r "$temp_file" ] || continue
+      temp_type=$(cat "${temp_file%/temp}/type" 2>/dev/null || true)
+      case "$temp_type" in *soc*|*cpu*|*thermal*) ;; *) continue ;; esac
+      temp_raw=$(cat "$temp_file" 2>/dev/null || true)
+      case "$temp_raw" in ''|*[!0-9]*) continue ;; esac
+      if [ "$temp_raw" -ge 1000 ]; then
+        temperature="$((temp_raw / 1000)).$((temp_raw % 1000 / 100))"
+      else
+        temperature=$temp_raw
+      fi
+      break
+    done
+    disk_total=null; disk_used=null
+    disk_info=$(df -Pk /data 2>/dev/null | awk 'NR == 2 {print $2, $3}')
+    set -- $disk_info
+    case "${1:-}" in ''|*[!0-9]*) ;; *) disk_total=$(( $1 / 1024 )); disk_used=$(( ${2:-0} / 1024 )) ;; esac
+    version=unknown
+    if [ -r /system/vendor/quasar/version_full ]; then
+      version=$(sed -n '1p' /system/vendor/quasar/version_full 2>/dev/null || echo unknown)
+      [ -n "$version" ] || version=unknown
+    fi
     quasar=0
     if ps | grep -q '[m]aind --'; then quasar=1; fi
     model_json=$(json_string "$model")
-    reply '200 OK' "{\"model\":\"$model_json\",\"uptime\":${uptime:-0},\"mem_used\":$used_mb,\"mem_total\":$total_mb,\"volume\":$volume,\"quasar\":$quasar}"
+    version_json=$(json_string "$version")
+    reply '200 OK' "{\"model\":\"$model_json\",\"firmware\":\"$version_json\",\"uptime\":${uptime:-0},\"mem_used\":$used_mb,\"mem_total\":$total_mb,\"loadavg\":\"$loadavg\",\"temperature_c\":$temperature,\"data_used_mb\":$disk_used,\"data_total_mb\":$disk_total,\"volume\":$volume,\"quasar\":$quasar}"
     ;;
   volume)
     [ "$METHOD" = POST ] || reply '405 Method Not Allowed' '{"error":"Use POST"}'
