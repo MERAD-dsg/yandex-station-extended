@@ -1,7 +1,7 @@
 #!/bin/sh
-# Small, allow-listed CGI API for the Station Mini 2 BusyBox httpd panel.
+# Small, allow-listed CGI API for the Station Mini 2 lighttpd panel.
 set -eu
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/data/opt/entware/bin
+PATH=/opt/bin:/opt/sbin:/data/opt/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 ROOT=/data/opt/mini2-web-panel
 
@@ -31,7 +31,26 @@ param() {
     esac
   done
   if [ -n "$value" ]; then
-    value=$(busybox httpd -d "$value" 2>/dev/null || printf '%s' "$value")
+    value=$(printf '%s' "$value" | awk '
+      function hexval(c, p) {
+        p = index("0123456789ABCDEF", toupper(c))
+        return p ? p - 1 : -1
+      }
+      {
+        for (i = 1; i <= length($0); i++) {
+          c = substr($0, i, 1)
+          if (c == "+") printf " "
+          else if (c == "%" && i + 2 <= length($0)) {
+            hi = hexval(substr($0, i + 1, 1))
+            lo = hexval(substr($0, i + 2, 1))
+            if (hi >= 0 && lo >= 0) {
+              printf "%c", hi * 16 + lo
+              i += 2
+            } else printf "%s", c
+          } else printf "%s", c
+        }
+      }
+    ')
   fi
   printf '%s' "$value"
 }

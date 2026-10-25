@@ -1,22 +1,32 @@
 #!/bin/sh
-# Run this on the Station after copying this directory to /data/opt/mini2-web-panel.
+# Run on the Station after copying this directory to /data/opt/mini2-web-panel.
 set -eu
 ROOT=/data/opt/mini2-web-panel
-BB=/bin/busybox
 SERVICE=/etc/init.d/S99zwebpanel
+LIGHTTPD=/opt/sbin/lighttpd
+PATH=/data/opt/bin:/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+export PATH
 
 [ "$(id -u)" = 0 ] || { echo "Run as root." >&2; exit 1; }
-[ -x "$BB" ] || { echo "BusyBox not found at $BB" >&2; exit 1; }
-"$BB" --list | grep -qx httpd || {
-  echo "This firmware's BusyBox has no httpd applet; nothing was installed." >&2
-  exit 1
-}
 [ -f "$ROOT/www/index.html" ] && [ -x "$ROOT/www/cgi-bin/api.cgi" ] || {
   echo "Panel files are incomplete at $ROOT" >&2
   exit 1
 }
 
-if [ ! -s "$ROOT/httpd.conf" ]; then
+if [ ! -x "$LIGHTTPD" ]; then
+  command -v yse >/dev/null 2>&1 || {
+    echo "Install Entware/YSE first; no HTTP server is installed." >&2
+    exit 1
+  }
+  echo "Installing lighttpd and its auth/CGI modules using yse..."
+  yse install lighttpd lighttpd-mod-auth lighttpd-mod-authn_file lighttpd-mod-cgi
+fi
+[ -x "$LIGHTTPD" ] || {
+  echo "lighttpd did not appear at $LIGHTTPD after package installation." >&2
+  exit 1
+}
+
+if [ ! -s "$ROOT/users" ]; then
   printf 'Set a panel password (at least 10 characters): '
   stty -echo
   IFS= read -r password || true
@@ -29,12 +39,10 @@ if [ ! -s "$ROOT/httpd.conf" ]; then
   stty echo
   printf '\n'
   [ "$password" = "$password2" ] || { echo "Passwords do not match." >&2; exit 1; }
-  hash=$("$BB" httpd -m "$password" | tr -d '\r\n')
-  unset password password2
-  case "$hash" in \$1\$*) ;; *) echo "BusyBox could not hash the password." >&2; exit 1 ;; esac
   umask 077
-  printf '/:admin:%s\n' "$hash" > "$ROOT/httpd.conf"
-  chmod 600 "$ROOT/httpd.conf"
+  printf 'admin:%s\n' "$password" > "$ROOT/users"
+  unset password password2
+  chmod 600 "$ROOT/users"
 fi
 
 if [ ! -s "$ROOT/csrf-token" ]; then
@@ -42,6 +50,25 @@ if [ ! -s "$ROOT/csrf-token" ]; then
   chmod 600 "$ROOT/csrf-token"
 fi
 chmod 755 "$ROOT/www/cgi-bin/api.cgi"
+chmod 700 "$ROOT"
+cat > "$ROOT/lighttpd.conf" <<'CONF_EOF'
+server.document-root = "/data/opt/mini2-web-panel/www"
+server.bind = "0.0.0.0"
+server.port = 80
+server.pid-file = "/var/run/mini2-webpanel.pid"
+server.errorlog = "/data/opt/mini2-web-panel/lighttpd-error.log"
+server.modules = ( "mod_auth", "mod_authn_file", "mod_cgi" )
+index-file.names = ( "index.html" )
+mimetype.assign = ( ".html" => "text/html", ".cgi" => "application/json" )
+
+# CGI runs as root because it writes ALSA/sysfs controls; only allow-listed
+# actions are implemented in www/cgi-bin/api.cgi. Do not expose port 80 publicly.
+auth.backend = "plain"
+auth.backend.plain.userfile = "/data/opt/mini2-web-panel/users"
+auth.require = ( "/" => ( "method" => "basic", "realm" => "Station Mini 2 panel", "require" => "valid-user" ) )
+cgi.assign = ( ".cgi" => "" )
+CONF_EOF
+chmod 600 "$ROOT/lighttpd.conf"
 
 mount -o remount,rw /
 rootfs_rw=1
@@ -57,22 +84,23 @@ cat > "$SERVICE" <<'SERVICE_EOF'
 #!/bin/sh
 ROOT=/data/opt/mini2-web-panel
 PID=/var/run/mini2-webpanel.pid
-LOG=$ROOT/httpd.log
+LOG=$ROOT/lighttpd-error.log
+BIN=/opt/sbin/lighttpd
 start() {
-  [ -x /bin/busybox ] || return 1
-  [ -s "$ROOT/httpd.conf" ] || { echo "No panel password config" >> "$LOG"; return 1; }
+  [ -x "$BIN" ] || { echo "lighttpd missing: $BIN" >> "$LOG"; return 1; }
+  [ -s "$ROOT/users" ] && [ -s "$ROOT/lighttpd.conf" ] || { echo "panel config missing" >> "$LOG"; return 1; }
   if [ -s "$PID" ]; then
     old=$(cat "$PID")
     case "$old" in *[!0-9]*|"") old="" ;; esac
     if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then return 0; fi
   fi
-  /bin/busybox httpd -f -p 0.0.0.0:80 -h "$ROOT/www" -c "$ROOT/httpd.conf" -r "Station Mini 2 panel" >> "$LOG" 2>&1 </dev/null &
+  "$BIN" -D -f "$ROOT/lighttpd.conf" >> "$LOG" 2>&1 </dev/null &
   echo $! > "$PID"
   sleep 1
   p=$(cat "$PID")
   if ! kill -0 "$p" 2>/dev/null; then
     rm -f "$PID"
-    echo "httpd failed to start; check port 80 and $LOG" >> "$LOG"
+    echo "lighttpd failed to start; check TCP/80 and $LOG" >> "$LOG"
     return 1
   fi
 }
