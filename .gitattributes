@@ -1,0 +1,3 @@
+# Preserve Unix line endings for scripts copied to embedded Linux devices.
+*.sh text eol=lf
+*.cgi text eol=lf
