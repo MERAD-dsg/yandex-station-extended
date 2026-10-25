@@ -67,7 +67,7 @@ class CookieAuthTests(unittest.TestCase):
             headers = app._auth_headers(cookies)
             self.assertIn("SAPISIDHASH ", headers["Authorization"])
             self.assertIn("SAPISID3PHASH ", headers["Authorization"])
-            self.assertEqual(headers["X-Origin"], "https://music.youtube.com")
+            self.assertEqual(headers["X-Origin"], "https://youtubei.googleapis.com")
         finally:
             os.unlink(path)
 

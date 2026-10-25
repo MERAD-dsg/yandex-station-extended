@@ -50,7 +50,9 @@ _HASH_COOKIE_PREFIXES = (
     ("__Secure-1PAPISID", "SAPISID1PHASH"),
     ("__Secure-3PAPISID", "SAPISID3PHASH"),
 )
-_AUTH_ORIGIN = "https://music.youtube.com"
+# InnerTube's API request is sent to youtubei.googleapis.com. XD3 validates that
+# Origin/X-Origin match that API host (the web page referer remains music.youtube.com).
+_AUTH_ORIGIN = "https://youtubei.googleapis.com"
 
 
 class PlayRequest(BaseModel):
