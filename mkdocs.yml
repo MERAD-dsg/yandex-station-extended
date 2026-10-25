@@ -117,6 +117,7 @@ nav:
       - USB Host (OTG): recipes/usb-host.md
       - AirPlay: recipes/airplay.md
       - YouTube Music: recipes/ytmusic.md
+      - Web-панель Мини 2: recipes/mini2-web-panel.md
       - Свои звуки: recipes/sounds.md
       - Fastfetch: recipes/fastfetch.md
       - Подсветка: recipes/led.md
