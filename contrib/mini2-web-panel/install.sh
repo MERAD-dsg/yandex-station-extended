@@ -8,10 +8,11 @@ PATH=/data/opt/bin:/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 
 [ "$(id -u)" = 0 ] || { echo "Run as root." >&2; exit 1; }
-[ -f "$ROOT/www/index.html" ] && [ -x "$ROOT/www/cgi-bin/api.cgi" ] || {
+[ -f "$ROOT/www/index.html" ] && [ -f "$ROOT/www/cgi-bin/api.cgi" ] || {
   echo "Panel files are incomplete at $ROOT" >&2
   exit 1
 }
+chmod 755 "$ROOT/www/cgi-bin/api.cgi"
 
 if [ ! -x "$LIGHTTPD" ]; then
   command -v yse >/dev/null 2>&1 || {
