@@ -47,7 +47,7 @@ if [ ! -s "$ROOT/users" ]; then
 fi
 
 if [ ! -s "$ROOT/csrf-token" ]; then
-  cat /proc/sys/kernel/random/uuid | tr -d '-\r\n' > "$ROOT/csrf-token"
+  cat /proc/sys/kernel/random/uuid > "$ROOT/csrf-token"
   chmod 600 "$ROOT/csrf-token"
 fi
 chmod 755 "$ROOT/www/cgi-bin/api.cgi"
