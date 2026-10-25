@@ -8,7 +8,7 @@ PATH=/data/opt/bin:/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 
 [ "$(id -u)" = 0 ] || { echo "Run as root." >&2; exit 1; }
-[ -f "$ROOT/www/index.html" ] && [ -f "$ROOT/www/cgi-bin/api.cgi" ] || {
+[ -f "$ROOT/www/index.html" ] && [ -f "$ROOT/www/cgi-bin/api.cgi" ] && [ -f "$ROOT/idle-rainbow.py" ] && [ -f "$ROOT/audio-player.py" ] || {
   echo "Panel files are incomplete at $ROOT" >&2
   exit 1
 }
@@ -56,6 +56,7 @@ cat > "$ROOT/lighttpd.conf" <<'CONF_EOF'
 server.document-root = "/data/opt/mini2-web-panel/www"
 server.bind = "0.0.0.0"
 server.port = 80
+server.max-request-size = 10240
 server.pid-file = "/var/run/mini2-webpanel.pid"
 server.errorlog = "/data/opt/mini2-web-panel/lighttpd-error.log"
 server.modules = ( "mod_auth", "mod_authn_file", "mod_cgi" )

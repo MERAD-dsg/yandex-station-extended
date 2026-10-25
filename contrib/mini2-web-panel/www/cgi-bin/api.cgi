@@ -156,5 +156,44 @@ case "$ACTION" in
     done
     reply '200 OK' '{"ok":true}'
     ;;
+  idle-rainbow)
+    if [ "$METHOD" = GET ]; then
+      command -v python3 >/dev/null 2>&1 || reply '200 OK' '{"available":false,"running":false,"state":"python3-missing","alice":"unknown"}'
+      result=$(python3 "$ROOT/idle-rainbow.py" status 2>/dev/null) || reply '503 Service Unavailable' '{"error":"Could not read idle rainbow status"}'
+      reply '200 OK' "$result"
+    fi
+    [ "$METHOD" = POST ] || reply '405 Method Not Allowed' '{"error":"Use GET or POST"}'
+    token=$(cat "$ROOT/csrf-token" 2>/dev/null || true)
+    [ -n "$token" ] && [ "${HTTP_X_PANEL_CSRF:-}" = "$token" ] || reply '403 Forbidden' '{"error":"CSRF check failed; reload the panel"}'
+    mode=$(param mode)
+    case "$mode" in start|stop) ;; *) reply '400 Bad Request' '{"error":"Mode must be start or stop"}' ;; esac
+    command -v python3 >/dev/null 2>&1 || reply '503 Service Unavailable' '{"error":"Install Python 3 with yse install python3 to use the opt-in test"}'
+    result=$(python3 "$ROOT/idle-rainbow.py" "$mode" 2>/dev/null) || reply '503 Service Unavailable' '{"error":"Idle rainbow monitor failed"}'
+    reply '200 OK' "$result"
+    ;;
+  audio-status)
+    [ "$METHOD" = GET ] || reply '405 Method Not Allowed' '{"error":"Use GET"}'
+    command -v python3 >/dev/null 2>&1 || reply '200 OK' '{"available":false,"uploaded":false,"playing":false,"filename":"","size":0}'
+    result=$(python3 "$ROOT/audio-player.py" status 2>/dev/null) || reply '503 Service Unavailable' '{"error":"Could not read audio player status"}'
+    reply '200 OK' "$result"
+    ;;
+  audio-upload)
+    [ "$METHOD" = POST ] || reply '405 Method Not Allowed' '{"error":"Use POST"}'
+    token=$(cat "$ROOT/csrf-token" 2>/dev/null || true)
+    [ -n "$token" ] && [ "${HTTP_X_PANEL_CSRF:-}" = "$token" ] || reply '403 Forbidden' '{"error":"CSRF check failed; reload the panel"}'
+    command -v python3 >/dev/null 2>&1 || reply '503 Service Unavailable' '{"error":"Install Python 3 with yse install python3 to upload audio"}'
+    result=$(python3 "$ROOT/audio-player.py" upload 2>/dev/null) || reply '503 Service Unavailable' '{"error":"Audio upload helper failed"}'
+    reply '200 OK' "$result"
+    ;;
+  audio-play|audio-stop|audio-delete)
+    [ "$METHOD" = POST ] || reply '405 Method Not Allowed' '{"error":"Use POST"}'
+    token=$(cat "$ROOT/csrf-token" 2>/dev/null || true)
+    [ -n "$token" ] && [ "${HTTP_X_PANEL_CSRF:-}" = "$token" ] || reply '403 Forbidden' '{"error":"CSRF check failed; reload the panel"}'
+    command -v python3 >/dev/null 2>&1 || reply '503 Service Unavailable' '{"error":"Install Python 3 with yse install python3 to control audio"}'
+    mode=play
+    case "$ACTION" in audio-stop) mode=stop ;; audio-delete) mode=delete ;; esac
+    result=$(python3 "$ROOT/audio-player.py" "$mode" 2>/dev/null) || reply '503 Service Unavailable' '{"error":"Audio player helper failed"}'
+    reply '200 OK' "$result"
+    ;;
   *) reply '404 Not Found' '{"error":"Unknown action"}' ;;
 esac
